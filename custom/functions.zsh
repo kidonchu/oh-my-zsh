@@ -56,18 +56,49 @@ function gitbrD () {
 
 function gitcobr () {
 
-	branches=($(/usr/bin/git br | grep -v '\*' | awk '{print $1}'))
+	if [[ ! -z $1 ]]; then
+		branches=($(/usr/bin/git br | grep -v '\*' | awk '{print $1}' | grep -iE $1))
+	else
+		branches=($(/usr/bin/git br | grep -v '\*' | awk '{print $1}'))
+	fi
 
     PS3='Choose branch to checkout: '
     select branch in "${branches[@]}"
     do
         case $branch in
             *)
-                /usr/bin/git checkout $branch
+				_git_switch_branch "$branch"
                 break
                 ;;
         esac
     done
+}
+
+function gitcobra () {
+
+	if [[ ! -z $1 ]]; then
+		branches=($(/usr/bin/git br | grep -v '\*' | awk '{print $1}' | grep -iE $1))
+	else
+		branches=($(/usr/bin/git br | grep -v '\*' | awk '{print $1}'))
+	fi
+
+	PS3='Choose branch to checkout: '
+	select branch in "${branches[@]}"
+	do
+		case $branch in
+			*)
+				currentDir=$(pwd)
+				_echo_progress "Switching ember app branch"
+				builtin cd ~/vagrant/dev/ember-app
+				_git_switch_branch "$branch"
+				_echo_progress "Switching Hosted branch"
+				builtin cd ~/vagrant/dev/Hosted
+				_git_switch_branch "$branch"
+				builtin cd "$currentDir"
+				break
+				;;
+		esac
+	done
 }
 
 function gitrmnew() {
@@ -119,4 +150,54 @@ function tt() {
 function vssh() {
     cd /Users/kchu/vagrant
     vagrant ssh
+}
+
+#####################
+### private functions
+#####################
+_git_create_branch() {
+	branch=$1
+	currentBranch=$(git br | grep '\*' | awk '{print $2}')
+	_echo_progress "$currentBranch => $branch"
+	git add .
+	_echo_progress 'Saving changes to stash'
+	git stash save "$currentBranch"
+	_echo_progress 'Creating target branch'
+	git fetch ActiveCampaign
+	git co -b "$branch" ActiveCampaign/feature-7.9-contact-deals.7
+	git push origin --set-upstream "$branch"
+}
+
+_git_switch_branch() {
+	branch=$1
+	currentBranch=$(git br | grep '\*' | awk '{print $2}')
+	_echo_progress "$currentBranch => $branch"
+	git add .
+	_echo_progress 'Saving changes to stash'
+	git stash save "$currentBranch"
+	_echo_progress 'Checking out target branch'
+	git checkout $branch
+	# check if there is any stash from previous edits
+	_echo_progress 'Restoring stashed changes'
+	_git_restore_stashed_changes "$branch"
+}
+
+_git_restore_stashed_changes() {
+	branch=$1
+	hasStash=$(git stash list |grep "$branch")
+	if [[ ! -z "$hasStash" ]]; then
+		stashed=$(echo "$hasStash" | awk -F':' '{print $1}')
+		if [[ ! -z "$stashed" ]]; then
+			git stash pop "$stashed"
+		fi
+	fi
+}
+
+_git_current_branch() {
+	echo $(git br 2&> /dev/null | grep '\*' | awk '{print $2}')
+}
+
+_echo_progress() {
+	echo
+	echo "$PROCESS: "$1
 }
